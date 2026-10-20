@@ -143,6 +143,11 @@ cp -a "$SRC/SDL2"/include/*.h "$LIBDIR/include/SDL2/"
 # SDL2_ttf (with vendored/freestatically-linked freetype)
 #
 echo "==> Building SDL2_ttf"
+# The vendored freetype sources must be fetched explicitly by the download
+# script in the external/ directory.
+if [ -f "$SRC/SDL_ttf/external/download.sh" ]; then
+    (cd "$SRC/SDL_ttf/external" && ./download.sh)
+fi
 cmake -S "$SRC/SDL_ttf" -B "$SRC/SDL_ttf/build" \
     -DSDL2TTF_VENDORED=ON -DSDL2TTF_SAMPLES=OFF \
     -DCMAKE_BUILD_TYPE=Release \
