@@ -243,7 +243,14 @@ public:
             m_MetalLayer.pixelFormat = MTLPixelFormatBGR10A2Unorm;
             if (frame->color_trc == AVCOL_TRC_SMPTE2084) {
                 // https://developer.apple.com/documentation/metal/hdr_content/using_color_spaces_to_display_hdr_content
-                m_MetalLayer.colorspace = newColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_PQ);
+                // kCGColorSpaceITUR_2100_PQ requires macOS 10.15.4+ (weak-linked on older OS versions).
+                CGColorSpaceRef pqColorSpace = nullptr;
+                if (@available(macOS 11.0, *)) {
+                    pqColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_PQ);
+                }
+                m_MetalLayer.colorspace = newColorSpace = pqColorSpace != nullptr ?
+                        pqColorSpace :
+                        CGColorSpaceCreateWithName(kCGColorSpaceITUR_2020);
             }
             else {
                 m_MetalLayer.colorspace = newColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2020);
@@ -271,14 +278,17 @@ public:
         paramBuffer.chromaOffset = simd_make_half2(chromaOffset[0],
                                                    chromaOffset[1]);
 
-        // Set the EDR metadata for HDR10 to enable OS tonemapping
-        if (frame->color_trc == AVCOL_TRC_SMPTE2084 && m_MasteringDisplayColorVolume != nullptr) {
-            m_MetalLayer.EDRMetadata = [CAEDRMetadata HDR10MetadataWithDisplayInfo:(__bridge NSData*)m_MasteringDisplayColorVolume
-                                                                       contentInfo:(__bridge NSData*)m_ContentLightLevelInfo
-                                                                opticalOutputScale:203.0];
-        }
-        else {
-            m_MetalLayer.EDRMetadata = nullptr;
+        // Set the EDR metadata for HDR10 to enable OS tonemapping.
+        // CAMetalLayer.EDRMetadata and CAEDRMetadata are only available on macOS 10.15+.
+        if (@available(macOS 10.15, *)) {
+            if (frame->color_trc == AVCOL_TRC_SMPTE2084 && m_MasteringDisplayColorVolume != nullptr) {
+                m_MetalLayer.EDRMetadata = [CAEDRMetadata HDR10MetadataWithDisplayInfo:(__bridge NSData*)m_MasteringDisplayColorVolume
+                                                                           contentInfo:(__bridge NSData*)m_ContentLightLevelInfo
+                                                                    opticalOutputScale:203.0];
+            }
+            else {
+                m_MetalLayer.EDRMetadata = nullptr;
+            }
         }
 
         paramBuffer.bitnessScaleFactor = getBitnessScaleFactor(frame);
@@ -641,7 +651,12 @@ public:
 
         // First, try to find a low power (Intel) or unified memory (Apple Silicon) GPU
         for (id<MTLDevice> device in devices) {
-            if (device.isLowPower || device.hasUnifiedMemory) {
+            // hasUnifiedMemory is only available on macOS 10.15+
+            bool hasUnifiedMemory = false;
+            if (@available(macOS 10.15, *)) {
+                hasUnifiedMemory = device.hasUnifiedMemory;
+            }
+            if (device.isLowPower || hasUnifiedMemory) {
                 return device;
             }
         }
@@ -662,7 +677,12 @@ public:
         int err;
 
         m_Window = params->window;
-        m_FrameRateRange = CAFrameRateRangeMake(params->frameRate, params->frameRate, params->frameRate);
+        // Assign the struct fields directly instead of calling CAFrameRateRangeMake(),
+        // which is only available on macOS 12+ and would be a NULL weak symbol on
+        // older macOS versions.
+        m_FrameRateRange.minimum = params->frameRate;
+        m_FrameRateRange.preferred = params->frameRate;
+        m_FrameRateRange.maximum = params->frameRate;
 
         id<MTLDevice> device = getMetalDevice();
         if (!device) {

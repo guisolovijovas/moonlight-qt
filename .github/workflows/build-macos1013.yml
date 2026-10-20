@@ -1,0 +1,53 @@
+name: Build - macOS 10.13 (High Sierra)
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MACOS_MIN: '10.13'
+
+jobs:
+  build:
+    name: Build Moonlight for macOS 10.13
+    # Intel (x86_64) runner - macOS 10.13 only ever ran on Intel Macs, and all
+    # prebuilt Qt 5.15 binaries are x86_64. Available until August 2027.
+    runs-on: macos-15-intel
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: 'recursive'
+          fetch-depth: 1
+
+      - name: Restore dependency cache
+        id: dep-cache
+        uses: actions/cache@v4
+        with:
+          path: libs/mac
+          key: macos1013-deps-v1-${{ hashFiles('scripts/setup-deps-macos1013.sh') }}
+
+      - name: Build dependencies (macOS 10.13 deployment target)
+        if: steps.dep-cache.outputs.cache-hit != 'true'
+        run: bash scripts/setup-deps-macos1013.sh
+
+      - name: Install Qt 5.15.2
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 5.15.2
+          cache: true
+
+      - name: Build Moonlight
+        run: bash scripts/build-macos1013.sh
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v6
+        with:
+          name: Moonlight-macOS-10.13
+          path: build/installer-Release/*.dmg
+          if-no-files-found: error

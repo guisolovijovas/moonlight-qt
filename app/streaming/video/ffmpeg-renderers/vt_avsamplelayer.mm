@@ -235,7 +235,14 @@ public:
             case COLORSPACE_REC_2020:
                 // This is necessary to ensure HDR works properly with external displays on macOS Sonoma.
                 if (frame->color_trc == AVCOL_TRC_SMPTE2084) {
-                    m_ColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_PQ);
+                    // kCGColorSpaceITUR_2100_PQ requires macOS 10.15.4+ (weak-linked on older OS versions).
+                    CGColorSpaceRef pqColorSpace = nullptr;
+                    if (@available(macOS 11.0, *)) {
+                        pqColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_PQ);
+                    }
+                    m_ColorSpace = pqColorSpace != nullptr ?
+                            pqColorSpace :
+                            CGColorSpaceCreateWithName(kCGColorSpaceITUR_2020);
                 }
                 else {
                     m_ColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2020);
