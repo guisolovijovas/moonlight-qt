@@ -34,6 +34,13 @@ LIBDIR="$REPO_ROOT/libs/mac"
 
 export MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN"
 
+# nasm is required for FFmpeg's hand-written x86 assembly but is not
+# preinstalled on the runner image.
+if ! command -v nasm > /dev/null; then
+    echo "==> Installing nasm"
+    brew install nasm
+fi
+
 rm -rf "$LIBDIR"
 mkdir -p "$SRC" "$OUT" "$LIBDIR/lib" "$LIBDIR/include/SDL2"
 
